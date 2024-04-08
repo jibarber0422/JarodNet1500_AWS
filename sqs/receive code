@@ -1,0 +1,32 @@
+import { SQSClient, ReceiveMessageCommand } from "@aws-sdk/client-sqs";
+
+const sqsClient = new SQSClient({ region: "us-east-1" }); 
+
+export const handler = async (event) => {
+    try {
+        const msg = "Hello sqs"
+        const params = {
+            QueueUrl: "https://sqs.us-east-1.amazonaws.com/992382600161/jarod-net1500-queue", 
+           MaxNumberofMessages : 10
+        };
+
+        const data = await sqs.send(new ReceiveMessageCommand(params));
+        const messages = data.messages
+        
+        if (messages.length == 0 ) {
+          console.log("No Messages");
+          return;
+        }
+        
+        messages.forEach((Message)=>{
+          console.log("Recevive message: ", message.Body);
+          
+        });
+    } catch (error) {
+        console.error("Error receiving message:", error);
+        return {
+            statusCode: 500,
+            body: "Error receiving message to SQS.",
+        };
+    }
+};
