@@ -1,18 +1,22 @@
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 
-const sqsClient = new SQSClient({ region: "us-east-1" }); 
+const sqsClient = new SQSClient({ region: "us-east-1" });
+const url = "https://gdsapi.cnbc.com/market-mover/groupMover/SP500/CHANGE_PCT/BOTH/12.json?source=SAVED&delayed=false&partnerId=2";
+
 
 export const handler = async (event) => {
     try {
-        const msg = "Hello sqs"
+        const res = await fetch(url);
+        console.info("status", res.status);
+        const json = await res.json();
         const params = {
-            QueueUrl: "https://sqs.us-east-1.amazonaws.com/873996336316/david-net1500-bigmover", 
-            MessageBody: msg,
+            QueueUrl: "https://sqs.us-east-1.amazonaws.com/992382600161/jarod-net1500-queue", 
+            MessageBody: JSON.stringify(json),
         };
 
         await sqsClient.send(new SendMessageCommand(params));
         console.log("Message sent successfully!" )
-        console.log( msg)
+        console.log(json)
 
         return {
             statusCode: 200,
