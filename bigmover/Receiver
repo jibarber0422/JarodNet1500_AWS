@@ -1,45 +1,70 @@
-import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
+import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from "@aws-sdk/client-sqs";
+import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 
 const sqsClient = new SQSClient({ region: "us-east-1" });
-const url = "https://gdsapi.cnbc.com/market-mover/groupMover/SP500/CHANGE_PCT/BOTH/12.json?source=SAVED&delayed=false&partnerId=2";
+const ses = new SESClient({ region: "us-east-1" });
 
 export const handler = async (event) => {
   try {
-    const res = await fetch(url);
-    console.info("status", res.status);
-    const msg = await res.json();
-    const bigmoverList = []
-    const tops = msg.rankedSymbolList[0].rankedSymbols;
-    for (var i = 0; i < tops.length; i++) {
-      console.log(tops[i])
-      const data = {
-        
-        ticker: tops[i].cnbcSymbol,
-        symbolDesc: tops[i].symbolDesc,
-        priceChange: tops[i].symbolData.changePct,
-        datetime: tops[i].symbolData.lastTime
-      };
-      bigmoverList.push(data);
-    }
-    console.log("big mover list");
-    console.log(bigmoverList);
+    const queueUrl = "https://sqs.us-east-1.amazonaws.com/992382600161/jarod-net1500-queue";
     const params = {
-      QueueUrl: "https://sqs.us-east-1.amazonaws.com/992382600161/jarod-net1500-queue",
-      MessageBody: JSON.stringify(bigmoverList),
+      QueueUrl: queueUrl,
+      MaxNumberOfMessages: 10, // Maximum number of messages to retrieve
+      WaitTimeSeconds: 10, // Wait time for long polling (optional)
     };
-    const sent = await sqsClient.send(new SendMessageCommand(params));
-    console.log("Message sent successfully!")
 
+    const data = await sqsClient.send(new ReceiveMessageCommand(params));
+    const messages = data.Messages || [];
+
+    if (messages.length === 0) {
+      console.log("No messages found in the queue.");
+      return;
+    }
+
+    const stocks = messages[0].Body || []
+
+    console.log("Received message:" + stocks);
+    console.log("Received message handle :" + messages[0].ReceiptHandle)
+
+    const stockArray = JSON.parse(stocks)
+    let emailbody = "<h2>Hi, here are the top movers today</h2>";
+    emailbody += "<ul>";
+    for (let i = 0; i < stockArray.length; i++) {
+      emailbody += "<li>" + JSON.stringify(stockArray[i].ticker) + ": " +
+        JSON.stringify(stockArray[i].priceChange) +
+        "%</li>";
+    }
+    emailbody += "</ul>";
+    const command = new SendEmailCommand({
+      Destination: {
+        ToAddresses: ["jibarber02@indianatech.net"],
+      },
+      Message: {
+        Body: {
+          Html: { Data: emailbody },
+        },
+        Subject: { Data: "Top movers today" },
+      },
+      Source: "jibarber02@indianatech.net",
+    });
+    let response = await ses.send(command);
+
+    const deleteParams = {
+      QueueUrl: "https://sqs.us-east-1.amazonaws.com/992382600161/jarod-net1500-queue",
+      ReceiptHandle: messages[0].ReceiptHandle,
+    };
+    const deleteResults = await sqsClient.send(new DeleteMessageCommand(deleteParams));
+    console.log("Message sent");
     return {
       statusCode: 200,
-      body: "Message sent successfully!",
+      body: "Messages received successfully!",
     };
   }
   catch (error) {
-    console.error("Error sending message:", error);
+    console.error("Error receiving messages:", error);
     return {
       statusCode: 500,
-      body: "Error sending message to SQS.",
+      body: "Error receiving messages from SQS.",
     };
   }
 };
